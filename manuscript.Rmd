@@ -1,0 +1,838 @@
+---
+title: "Economic inequality and the spatial distribution of stop and search: evidence from London"
+author: <span style="font-variant:small-caps;">Joel H. Suss^[J.Suss@lse.ac.uk, London School of Economics & Political Science] & Thiago R. Oliveira</span>
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  word_document:
+    reference_docx: template_bjc.docx
+abstract: "We analyse the spatial concentration of stop and search (S&S) practices. Previous work argues that the persistent reliance on S&S, despite weak to null deterrent effects on crime, results from a social order maintenance motivation on the part of the police. Expanding previous studies that focused on *who* tends to be stopped and searched by police officers, we focus on *where* S&S concentrates and investigate the role of economic inequality. We use data from London in 2019 and demonstrate that a novel measure of salient, spatially-granular economic inequality is positively associated with S&S incidence at a small spatial scale, even when controlling for crime rates and other important variables. Police officers more frequently stop and search members of the public in places where the well-off and the economically precarious co-exist. Implications for understanding S&S as a tool which distinguishes between citizens, between those to protect and potential criminals, are discussed."
+bibliography: references.bib 
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	fig.height = 8,
+	fig.width = 12,
+	message = FALSE,
+	warning = FALSE,
+	comment = "",
+	dpi = 300,
+	include = TRUE
+)
+library(MASS, exclude = "select")
+library(tidyverse)
+# set font to times new roman
+windowsFonts(Times = windowsFont("Times New Roman"))
+theme_set(theme_minimal(base_size = 18, base_family = "Times"))
+library(stargazer)
+library(captioner)
+library(kableExtra)
+library(sf);sf::sf_use_s2(FALSE)
+library(modelr)
+library(spdep)
+library(biscale)
+library(cowplot)
+library(spatialreg)
+library(broom)
+
+load("stop_search_clean.Rdata")
+
+# for automatic numbering
+ch_nums <- captioner(prefix = "Section")
+ch_nums("intro",display = "cite")
+fig_nums <- captioner(prefix = "Figure")
+figa_nums <- captioner(prefix = "Figure A.",auto_space = F)
+tbl_nums <- captioner(prefix = "Table")
+tbla_nums <- captioner(prefix = "Table A.",auto_space = F)
+
+# convenience function
+Mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+```
+
+__Key words__: policing, stop and search, economic inequality, police effectiveness, social control
+
+\newpage
+
+# Introduction
+
+The ability of the police to use coercive powers to control crime and maintain social order is one their defining features [@loader2001policing]. One of the best examples of the use of such coercive powers is the ability of law enforcement agents to stop members of the public, check their identities, and search their possessions, in what has been widely referred to as stop and search (S&S) practices. With the promise to repress criminal behaviour and ensure public safety, police organisations around the globe have increasingly made use of such powers [@weber2014stop]. In England and Wales, for instance, police forces have relied on S&S practices more or less continuously since the 1980s, despite it being controversial, with lively reactions from the public whenever policymakers increase the use of pedestrian searches.
+
+The promise of tackling crime through S&S is premised on the idea that individuals will be deterred from engaging in offensive behaviour if they believe they could likely be stopped by law enforcement agents [@apel2011general]. This is particularly true for crimes related to drugs or knife carrying [@weisburd2016stop]. Previous research shows that some strategies based on focused deterrence and 'hotspot' policing have indeed led to modest improvements in some crime rates, especially in the United States [@braga2018focused]. S&S practices, in particular, are moderately associated with reductions in drug crimes in the United Kingdom [@tiratelli2018does]. Yet, in general, the widespread use of S&S powers tends to be, at best, only slightly successful at decreasing specific crime rates at specific locations, and overall is considered a somewhat ineffective tool for crime control [@tiratelli2018does; @delsol2015effectiveness; @mccandless2016initiatives; @macdonald2016effects]
+
+It is important to understand the impact of S&S on crime. But it is also important to understand the unintended consequences of increased police presence in certain communities. As noted by @manski2017assessing, confrontational proactive policing strategies, such as S&S, must balance the sometimes conflicting objectives of crime deterrence and community trust. For instance, @sharkey2018uneasy has recently argued how aggressive policing and a general expansion of criminal justice institutions contributed to the decline in violent crime in the United States over the last decades, but also demonstrated the ways in which the reliance on such confrontational practices has taken a heavy toll -- with entire communities destabilised by mass incarceration and increased levels of police brutality. Similarly, @bradford2017stop showed how the persistent reliance on S&S practices to reduce crime in England and Wales can undermine public beliefs about police trustworthiness and legitimacy, generating at least as many dis-benefits as benefits in relation to police effectiveness [see also @bradford2015unintended].
+
+Given the undermining of trust in the police and the modest efficacy of S&S as a crime-control strategy, previous work has suggested that the persistence of governmental reliance on S&S practices is more related to social order maintenance, widely defined, than to crime-fighting, narrowly defined [@bradford2016police; @tiratelli2018does]. This argument is sustained, for instance, by the well documented literature on ethnic disparities in the United Kingdom (UK) [@bowling2007disproportionate; @quinton2015race], as a growing body of research documents that Black, Asian, and Minority Ethnic (BAME) individuals are more likely to be stopped and searched by police than White people [@vomfell2021officer; @shiner2018colour; @miller2020can]. By over-policing BAME groups, police behaviour would be restating power relations within society -- i.e., police actions on *who* to stop and search would then inform how structural forces interact, and how the police contribute to maintain social order.
+
+Complementing this previous research, in this study we focus on *where* police officers tend to stop and search members of the public. We hypothesise that, if S&S is indeed a tool of social control, economic inequality might be a factor in the concentration of police searches. Stopping and searching citizens can ascribe identity [@bradford2016police; @oliveira2021trustworthiness] and reproduce cultural meanings of the police as an institution that provides protection to some groups of people (i.e., the rich) and suspicion to other, subordinate sections of society (i.e., the poor). Highly unequal neighbourhoods with streets occupied by both the rich and the poor could therefore attract police coercive practice, with officers conducting more searches than in more economically homogeneous locations.
+
+Using a novel measure of salient, spatially-granular economic inequality developed by @suss_local, we investigate spatial association at the Lower Layer Super Output Areas (LSOA) level and show that S&S practices are concentrated in places where the economically deprived and the well-off co-exist. Even when previous crime rates and demographic characteristics are taken into account, economic inequality predicts heightened S&S activity. The role policing plays in maintaining social order -- over-patrolling some groups of people in pursuit of other groups of people's protection -- is then evident by the spatial concentration of police searches in more *unequal* locations.
+
+The rest of the paper proceeds as follows. First, we set the scene and explain the legal context of S&S powers in England and Wales, review the studies that estimate the deterrent effect of S&S on crime rates, discuss S&S as a tool of social control, and address the extent to which a focus on spatial patterns could contribute to the literature. Then we go on to present this study's data, methods, and results, and conclude with a discussion on the spatial concentration of S&S practices in London.
+
+# Literature  
+  
+## Stop and search in England and Wales
+
+Police officers acting with suspicion against citizens might be one of the oldest practices involved in policing activities. In the UK, police powers to stop and search members of the public are currently regulated by various pieces of legislation, but the Police and Criminal Evidence Act 1984 (PACE) is probably the most significant [@bridges2015legal]. PACE established legal powers of the police to stop and search a person (or vehicle) in a public space as long as officers have reasonable suspicion that the person is in possession of stolen goods, weapons, or other prohibited articles. More recent developments in the legislation have granted further powers to the police, allowing for 'suspicion-less' stop and searches under specific circumstances; notably, section 60 of the Criminal Justice and Public Order Act 1994 (hereafter S60), which allows senior police officers to authorise stop and search practices against any person in a particular locality for 24 hours (which can be extended) with the goal of fighting violence associated with specific events. Moreover, section 44 of the Terrorism Act 2000 (S44) allows senior police officers to authorise stop and search without reasonable suspicion if deemed necessary to prevent acts of terrorism, though this has since been repealed.
+  
+The use of police powers to stop and search citizens in England and Wales varies considerably across time and place [@bradford2017stop], even within London [@tiratelli2018does]. As @shiner2015policits suggest, variations in the use of such powers are directly associated with the broader politics of crime control. With the promise of deterring future criminal behaviour, increases in the number of stop and searches -- particularly the 'suspicion-less' variety -- can be framed within a 'toughening of crime control' political ideology, which is more or less popular depending on the political climate. At the same time, previous research argues that S&S is, at least partly, a tool for social control, as evidenced in the UK by high levels of ethnic disproportionality in the use of S&S powers [see @bowling2007disproportionate; @shiner2018colour]. This study tackles this double aspect of policing -- crime deterrence and social control, or "parking tickets and class repression" [@marenin1982parking] -- by assessing *where* police stops and searches are concentrated in the UK capital. 
+
+## S&S as a strategy for crime deterrence?
+
+Police powers to stop and search members of the public are justified using a number of reasons. Notably, police reports often emphasise the importance of S&S to investigate crime and to apprehend weapons [@met2014]. But one of the main motivations for the persistence of S&S is the promised deterrent effect on crime -- the promise that increasing the number of police stops and searches will have a downstream effect on crimes, especially knife crime and drug offences [see @may2014statement].
+
+Deterrence theory premises that rational individuals will be deterred from engaging in offensive behaviour should the costs (e.g., punishment) outweigh potential gains from their behaviour [@becker1968crime]. Two important mechanisms are often listed as effective crime deterrents: the certainty and the severity of punishment [@apel2011general]. In the case of S&S, the former is the theoretical foundation for its effectiveness: by increasing the number of police stops, potential criminals would perceive a higher likelihood of being caught and therefore be deterred from carrying knives or drugs. An important aspect of S&S is to therefore appear risky for potential offenders. Though theoretically sound, a sensible empirical question is: does it actually work? Is S&S effective in deterring crime [@delsol2015effectiveness]?
+
+This was the primary question posed by @tiratelli2018does. Using stop and search data for every borough in London from April 2004 to November 2014, the authors used lagged dependent variable models to estimate the effect of the number of stops and searches in one week or month on a number of crime rates in the following week or month, controlling for previous crime rates. They also relied on interrupted time series models to estimate the effect of the sudden increase in the use of 'suspicion-less' stops and searches (based on S60) between 2007 and 2011 on subsequent crime rates. They found very little evidence that S&S has a deterrent effect on crime -- there were no effects on robbery and theft, vehicle crime or criminal damage, very small or no effects on burglary, non-domestic violent crime and total crime. Only drug offences appeared to be somewhat affected by variations in S&S, though even in this case the causal mechanism is not clear [@tiratelli2018does, pp. 1224-1225]. Overall, the authors conclude that S&S practices have relatively little deterrent effect.
+
+Another London-based study was conducted by @mccandless2016initiatives, who investigated the effect of Operation BLUNT 2 on crime rates. Operation BLUNT 2 was a large initiative that involved the increase of suspicion-less stop and searches based on S60 in some boroughs. The authors used difference-in-differences to assess the policy impact on knife crime comparing boroughs where the policy was implemented with boroughs where it was not. In summary, they found that the increase in S60-based stop and searches had no effect on police recorded crime. Other studies corroborate the lack of empirical evidence on the effect of similar policing strategies worldwide on crime rates, most notably in the context of New York City's Stop, Question and Frisk (SQF) policy [@macdonald2016effects; @smith2012stop; @rosenfeld2014impact; @fagan2016terry].
+
+Taken together, there is no consensus on the effect of S&S on crime rates. Evidence points to heterogeneous impacts of this type of policy strategy depending on spatial differences and the type of crime [@weisburd2016stop], but overall studies find no or little decreases in most crime rates. Given the apparent ineffectiveness of stopping and searching members of the public, another question posed by the literature is around the persistence of S&S practices [@bradford2015unintended]. Specifically, recent studies have investigated whether an interpretation of S&S practices as a tool of social control provides the explanation.
+
+## S&S as a tool of social control?
+
+@tiratelli2018does argue that, apart from officers' beliefs that this is a useful tool of crime control, S&S practices are not solely about crime -- "it is also a tool of order maintenance, used by police officers seeking to assert power and control in a situation or locale" (p. 1226). A large body of previous research on the cultural meaning of policing powers has suggested the interpretation of police as an institution of social ordering that provides identities to the policed depending on their position in structural relationships [see @bradford2016police]. In that sense, stop and search powers contribute to protect the boundaries of inclusion and exclusion [@waddington1999police] as police contact contains status-relevant information about citizens [see @oliveira2021trustworthiness].
+
+The interpretation of S&S powers as a tool of social control is often linked to ethnic disparities, which have been extensively documented by previous research [@vomfell2021officer; @shiner2018colour; @miller2020can]. Black, Asian, and minority ethnic (BAME) groups are more likely to be stopped and searched than their White counterparts -- for instance, as of 2017 Black people were stopped and searched more than eight times the rate of white people [@shiner2018colour]. Considering the over-representation of BAME groups in S&S, one argument is that police powers to stop and search members of the public would mainly be used by police officers seeking to assert power and control, restating power relations within society and informing order maintenance. Ethnic disparities in the police use of S&S powers is a social problem yet to be tackled, and one that has worsened as the overall number of S&S decreased over the last decade [@shiner2018colour].
+
+Rather than focusing on *who* is stopped and searched, an alternative strategy to investigate claims that S&S should be interpreted more as a tool of social control and order maintenance, widely defined, than as a tool for crime deterrence, narrowly defined, is to investigate *where* stops and searches tend to cluster in a city. This was suggested by @vomfell2021officer, who conducted a large-scale study on stop and search in the West Midlands and found that, above and beyond the effects of individual police officers disproportionately targeting BAME populations, the over-patrolling of minority areas was fundamental to explain socially relevant outcomes such as ethnic disparities. 
+
+Aside from ethnic and racial discrimination, investigating spatial patterns of S&S practices could partly inform other ways in which police officers seek to assert power and order. In particular, we hypothesise that economic inequality plays an important role in the spatial distribution of S&S, with police officers conducting more searches in more unequal neighbourhoods where the well-off and the economically precarious co-exist. 
+
+# This study
+
+To address this, we analyse stop and search data from London in 2019, aggregated by Lower Super Output Area (LSOA). LSOAs are areas designed for census purposes and to improve local statistics in England and Wales. They are also population-weighted, containing on average `r mean(lond$residents.y, na.rm = T) %>% round %>% scales::comma()` residents (SD = `r sd(lond$residents.y, na.rm = T) %>% round %>% scales::comma()`). To introduce the data, `r fig_nums("stops map",display="cite")` shows the spatial distribution of the stop and search count by LSOA -- it is a highly heterogeneous distribution, with larger concentrations of stops in the Central, North East, and West parts of the UK capital.^[All police forces in the UK make S&S and crime data publicly available: https://data.police.uk/.] 
+
+Our hypothesis -- based on the interpretation of S&S as a tool of social control -- is that economic inequality plays a role, with more unequal locations being more susceptible to S&S practices even when holding previous crime rates and other demographic characteristics constant. According to a model of social control put forward by Choongh [-@choongh1998policing], aspects of police behaviour and activity can be seen as seeking to 'subordinate sections of society' which are deemed inherently criminal (p. 623). The poor are one such section, and it is therefore in areas where the poor and rich live side-by-side where police are more likely to be deployed or primed to wield S&S as a tool of social control -- to protect one segment of society from other subordinate sections of society.
+
+How might this operate? This heightened attention on the part of the police towards economically unequal neighbourhoods might be conscious or unconscious, stemming from top down or bottom up decision-making -- i.e. resulting from a perceived, implicit or institutionalised need to maintain social order. We are agnostic over how exactly these policing decisions to over-patrol unequal neighbourhoods relative to economically homogenous neighbourhoods are made, but rather focus on whether our theoretical predictions are empirically verified, thereby leaving an analysis of the exact mechanisms through which local inequality leads to heightened police attention and greater incidence of S&S to future research.
+
+To test our hypothesis, we use a novel measure of salient, spatially-granular economic inequality at the LSOA-level based on the estimated value of around 23 million UK residences [@suss_local]. One of the advantages of our measure is that it is more perceptible to individuals, given that it is based on a major feature of the built environment used by individuals to make distributional assessments (i.e., quality of houses), as opposed to unobservable features (e.g., income of residents) [see @suss_local]. @suss_local finds housing value inequality to be substantively associated with individual perceptions of local economic inequality in the UK across two surveys. This perceptual point is important because we believe that observing the juxtaposition of rich and poor is more likely to trigger the social control motive for S&S. `r fig_nums("ineq map",display="cite")` shows the spatial distribution of housing value inequality as measured by the Gini coefficient -- a commonly used measure of economic inequality -- for London in 2019 at the LSOA-level. 
+  
+## Data and methods
+
+Our response variable consists of the number of stop and searches in 2019 by LSOA (N = `r nrow(lond) %>% scales::comma()`). The distribution of S&S is highly skewed. `r (prop.table(table(lond$stops < 6))[2] * 100) %>% round(digits = 1) %>% as.numeric`% of locations had no more than 5 stops and searches in 2018, whereas a single LSOA had `r max(lond$stops) %>% scales::comma()` of such police stops. The median number of stops is `r median(lond$stops, na.rm = T) %>% round(digits = 1)`, while the average is `r mean(lond$stops, na.rm = T) %>% round(digits = 1)` and the mode is just `r Mode(lond$stops)` -- which speaks to the highly unequal distribution of S&S powers across Greater London. `r fig_nums("stops map", display = "c")` maps the spatial distribution of stops in London for 2019.  
+
+Our main explanatory variable is a measure of economic inequality based on housing values. The data comes from the online property aggregator Zoopla and was gathered in September 2019. The size of the data (approximately 23 million observations for the UK) allows us to measure economic discrepancies at a far more granular level than possible with conventional data sources [@suss_local]. We estimate inequality down at the LSOA-level to match the S&S data (average of `r mean(lond$n, na.rm = T) %>% round` housing value observations per LSOA). The Gini coefficient ranges from `r min(lond$gini, na.rm = T) %>% round(digits = 3)` to `r max(lond$gini, na.rm = T) %>% round(digits = 3)`, with a mean value of `r mean(lond$gini, na.rm = T) %>% round(digits = 3)` -- see `r fig_nums("ineq map", display = "c")` for a map of inequality in London.  
+  
+__`r fig_nums("stops map","Number of Stop and searches -- London, 2019, LSOA-level")`__
+```{r map ldn}
+cuts <- c("0", "1-10", "11-25", "26-99", "100-199", "200+")
+map_stops <- ggplot(
+  data = lond %>% 
+    mutate(
+      stops_quant = cut(
+        stops, c(0, 0.1, 10, 25, 99, 199, max(lond$stops)),
+        include.lowest = T,
+        labels = cuts
+        )
+    )
+) +
+  geom_sf(
+    mapping = aes(fill = stops_quant), colour = NA) +
+  labs(fill = "Stops") +
+  scale_fill_viridis_d() +
+  theme_map()
+map_stops
+```
+*Note: The figure shows the spatial distribution of police stops and searches for London, 2019. The data was downloaded from https://data.police.uk/.*
+
+__`r fig_nums("ineq map","Housing value inequality -- London, 2019, LSOA-level")`__
+```{r map inequa}
+map_ineq <- ggplot(data = lond) +
+  geom_sf(mapping = aes(fill = gini), colour = NA) +
+  labs(fill = "Gini") +
+  scale_fill_viridis_c(option = "magma") +
+  theme_map()
+
+map_ineq
+```
+*Note: The figure shows the spatial distribution of within-LSOA housing value inequality for London, 2019. Data on housing values comes from Zoopla and is discussed in @suss_local. Areas with less than 50 observations are omitted (gray).*
+
+## Control variables
+
+We control for variables that potentially confound the relationship between economic inequality and the S&S count at the LSOA level. As discussed above, one of the stated promises of confrontational proactive policing methods, such as the use of S&S powers, is their deterrent effect on crime. Although previous studies suggest a relatively weak effect of S&S on future crime, police forces could potentially allocate their resources -- including the decision regarding where stop and search members of the public -- in pursuit of crime deterrence, and therefore make decisions based on previous crime rates. This is particularly true for previous drug-related crime offences [see @tiratelli2018does]. If a given location had more drug-related offences registered in the previous year, it is reasonable to assume that police forces would prioritise such location over other, 'less risky' ones. At the same time, local inequality has also been found to be correlated with violence figures [see @kang2016inequality]. As such, crime rates -- particularly previous drug offences -- could be potentially confounding the association between local inequality and the number of S&S. 
+
+In order to control for previous reported crime, we include the following variables in the analysis:
+  
+  - *Drug Offences in 2018*
+  
+  We include the rate of drug offences per LSOA for 2018 as a control variable (standardised by LSOA workplace population taken from the 2011 census). This is taken from data made publicly available by the UK police (https://data.police.uk/). Temporally lagged drug offences are our most important control variable, given that drugs is one of the primary reasons cited by police for performing S&S and the only type of offence moderately affected by variations in the use of S&S according to previous research [@tiratelli2018does].
+
+  - *Multiple Deprivation Indices, Crime domain scores for 2019*
+
+  In order to control for the level of crime at the LSOA-level more generally, we include the crime domain scores from the 2019 Index of Multiple Deprivation (IMD; @dclg). The score comprises four indicators, based on data from between 2016 and 2018, related to rates of violence, burglary, theft, and criminal damage. This index is another crucial control variable. Theoretically, police forces could decide on resource allocation -- including S&S allocation -- based on how violent neighbourhoods were in the past, which is also potentially associated with levels of salient inequality. Crime indicators confound the relationship between structural neighbourhood conditions and number of stop and searches.
+
+Additionally, several other variables also need to be taken into account, most notably those related to neighbourhood structural conditions. Previous research demonstrates how some social disorganisation indicators (e.g., concentrated poverty, ethnic diversity, population density, among others; see @sampson1997neighborhoods), which are intrinsically related to economic inequality, also predict variation in police behaviour [@kane2002social; @sutherland2013collective]. The additional control variables we include in the analysis are the following:
+
+  - *Ethnic composition in 2011*
+
+  We include a measure of ethnic composition at the LSOA-level using data from the 2011 census. We construct this as the percent of residents who are non-White.^[In robustness checks (unreported), we confirm that our results are not sensitive to whether we measure ethnic composition using the Herfindahl-Hirschman concentration index using the broad ethnic categories in the census or the percent of residents who are black.] 
+  
+  - *Multiple Deprivation Income scores for 2019*
+  
+  We include the income domain score from the IMD. This comprises indicators for the number of families per area receiving income support, jobseeker's allowance, employment and support allowance, and pension credit. For the detailed description of the domains and methodology, see @dclg.
+  
+  - *Average property value (log scale)*
+  
+  We include the average property value for the area (logged). This, along with the income score, allows us to control for the level of affluence per LSOA.
+
+  - *Distance to nearest transport hub*
+
+  We introduce a measure of the distance (in meters) from each LSOA centroid and the nearest Transport for London (TfL) station (i.e. including underground, overground and rail services). 
+    
+  - *Density*
+  
+  Finally, we control for population density (defined as the usual resident plus workplace population divided by hectares) from the 2011 UK census. `r tbl_nums("var desc",display="cite")` provides descriptive statistics for all variables. 
+
+__`r tbl_nums("var desc","Descriptive statistics for control variables")`__
+```{r control vars}
+stargazer(
+  lond %>% 
+    select(
+      stops,
+      gini,
+      avg,
+      density_work,
+      inc_score19,
+      crime_score19,
+      crime_drugs_rate,
+      tube_distance,
+      non_white
+      ) %>% 
+    mutate(avg = round(avg / 1000)) %>%
+    st_drop_geometry(),
+  type = "text", 
+  summary = T,
+  out = "descr_table.html",
+  covariate.labels = c(
+    "Stops",
+    "Gini coefficient",
+    "Average property value (GBP thousands)",
+    "Density (workday population / hectares)",
+    "Income deprivation score",
+    "Crime deprivation score",
+    "Drugs rate (offenses / workplace population)",
+    "Distance to nearest TfL station (meters)",
+    "Non-white percentage"
+  )
+)
+```
+*Note: The table provides descriptive statistics for all variables.*
+  
+## Analytic strategy
+
+Our hypothesis is that local economic inequality is a driver of S&S. In order to properly assess this hypothesis, we need to take into account potential spatial dependency as well as other confounders (e.g. crime rates). It could be that LSOAs which are close to each other are similar in a number of observed and unobserved features, with police behaviour and structural conditions being just two of those features. The tests we perform in this paper aim to rule out alternative explanations for the spatial association between the number of S&S and salient inequality at LSOA-level.
+  
+Our analytic approach is two-pronged. Our goal is to investigate whether there is a spatial association between the number of S&S and the level of economic inequality at the LSOA-level. First, we assess the extent to which the relationship between the two variables remain significant when controlling for spatial effects alongside all control variables described above. To do so, we compare an OLS model that treats stops as a continuous variable with a Spatial Durbin Model (SDM).^[The SDM aligns with our theoretical expectations for the process that might create spatial dependence between the regressors and police stops, however we also explore the fit of other spatial regression models and whether these affect our coefficient estimate for inequality (unreported). They do not.] The SDM includes spatial lags -- taken as the average of all adjoining LSOAs (i.e. the Queen configuration) -- for the outcome and regressor variables. This accounts for possible dependence between, for example, stops and searches in any given area with the level of inequality and drugs crime rate in neighbouring LSOAs. More formally: 
+
+$$ y_j = \rho W y_j + \beta X_j + \lambda W X_j + \zeta_j + \epsilon_j $$
+
+where $y_j$ is the number of stops for area $j$, $W$ is the row-standardised spatial weight matrix (non-zero elements indicate a neighbouring LSOA), $X_j$ is a vector of covariates with associated $\beta$ parameters to be estimated, $\rho$ and $\lambda$ are the parameters for the dependent and independent spatial lags, $\zeta_j$ is a vector for the Borough of each area $j$ (i.e. Borough fixed-effects), and $\epsilon_j$ is the error term. 
+    
+Second, given that the number of S&S by LSOA is a count variable we employ negative binomial regression models to evaluate the relationship between police stops and inequality. The variance of stops exceeds the average (i.e. overdispersion), so the negative binomial model specification is better suited versus the Poisson (log-linear) regression model, which assumes that the average is equal to the variance. However, we are unable to account for spatial effects using the negative binomial model given the limitations that result from including the spatial lag in the exponential function [@glaser2017], hence why we first control for spatial effects when treating the number of stops as a continuous variable. The negative binomial model takes the form:
+
+$$ln(\mu_j) = \beta_0 + \beta X_j + \zeta_j + \epsilon_j $$ 
+
+where $\mu_j$ is the expected value of our outcome measure for area $i$ with variance $\mu + \mu^2 / \theta$, $\beta_0$ is the intercept, $X_j$ a vector of independent variables, and $\beta$ a vector of coefficients to be estimated (along with $\theta$) using maximum likelihood.
+  
+# Results
+  
+```{r results prep}
+set.seed(180*346)
+df <- lond %>% 
+  select(
+    stops,
+    gini, 
+    avg, 
+    density = density_work, 
+    inc_score, 
+    crime_score, 
+    crime_drugs_rate,
+    non_white,
+    tube_distance,
+    lad_nm19 
+    ) %>%
+  mutate_at(
+    vars(density, avg),
+    ~ log(.)
+  ) %>% 
+  mutate_at(
+    vars(
+      density,
+      gini,
+      avg,
+      crime_drugs_rate,
+      crime_score,
+      inc_score, 
+      non_white, 
+      tube_distance
+      ),
+    ~ scale(.) %>% as.numeric
+  ) %>% 
+  na.omit 
+
+list.queen <- poly2nb(df, queen = T)
+W <- nb2listw(list.queen
+              , style = "W" # equal weight to neighbours
+              , zero.policy = T)
+
+df <- df %>% st_drop_geometry()
+
+mod_lm <- lm(stops ~ ., data = df)
+# fit durbin model
+mod_durb <- lagsarlm(
+  stops ~ .,
+  data = df,
+  type = "mixed",
+  method = "MC",
+  W
+)
+```
+  
+First, we compare the OLS coefficient estimates with that of the SDM. The Moran's I test statistic on the OLS residuals reveals spatial correlation ($p$ < 0.01), but this is no longer the case when introducing the spatial lags -- a Monte-Carlo simulation of Moran's I reveals the SDM model residuals are not spatially correlated ($p$ = `r set.seed(234);moran.mc(mod_durb$residuals,W,nsim=999)$p.value`; based on 1000 simulations). 
+  
+`r tbl_nums("regs spatial",display="c")` displays the output from the OLS and Durbin models. Both models control for the average property value (log scale), income and crime deprivation scores, population density (log scale), the percent of non-White residents, distance to the nearest TfL station, and the 2018 rate of drug crimes. The coefficients for the spatial lags of the drug crime rate and TfL station distance are found to be significant ($p$ < 0.01; not shown), as is $\rho$, the coefficient on the lag of the dependent variable ($p$ < 0.01). Taking into account the spatial autocorrelation of neighboring LSOAs, we can see that the greater the level of economic inequality of a location, the higher the number of stops and searches -- this is the case in both the OLS and the SDM models, with the size of the coefficient becoming slightly smaller in magnitude once spatial effects are taken into account. Specifically, considering Model 2 of `r tbl_nums("regs spatial",display="c")`, a standard deviation increase in the Gini coefficient (SD = `r sd(lond$gini, na.rm = T) %>% round(digits=3)`) is associated with more than `r mod_durb$coefficients[["gini"]] %>% round` additional police stops.   
+    
+__`r tbl_nums("regs spatial","OLS and SDM regression results")`__
+```{r spatial models}
+covs <- c("Gini","Average property value (log)","Density (log)","Income deprivation","Crime deprivation", "Drugs rate","Non-white (%)","TfL station distance", "Gini : Income deprivation")
+stargazer(
+  mod_lm,
+  mod_durb,
+  type = "text",
+  no.space = T,
+  dep.var.labels = "Stop and searches, London (2019)",
+  covariate.labels = covs,
+  omit = c("Constant","^(lag|lad)"),
+  add.lines = list(
+    c("Borough fixed effects",rep("Y", 3)),
+    c("Rho","",summary(mod_durb)$rho %>% round(digits = 2))
+  ),
+  out = "police_london_spatial_regs.htm",
+  notes.align = "l",
+  notes = c(
+    "All independent variables are standardised (mean equal to zero, standard deviation equal to one)."
+  ),
+  model.names = F,
+  column.labels = c("OLS", "SDM")
+)
+
+# negative binomial models
+mods_nb <- list(
+  mod1 = glm.nb(data = df, stops ~ gini, maxit = 1000),
+  mod2 = glm.nb(data = df, stops ~ ., maxit = 1000),
+  mod3 = glm.nb(data = df, stops ~ gini * inc_score + ., maxit = 1000)
+  )
+```
+
+Next, we present the results for the negative binomial regression models in `r tbl_nums("regs nb", display="cite")`. Model 1 just contains the inequality variable and Model 2 adds all the control variables. The results indicate that the coefficient on our measure of inequality is significant and slightly larger when introducing the controls. We can get a sense of the substantiveness of this effect by taking the exponent of the coefficient, known as the Incidence Rate Ratio (IRR). For Model 2, the IRR is `r tidy(mods_nb[[2]])  %>% filter(str_detect(term,"gini")) %>% .$estimate %>% exp %>% round(digits=2)`, which indicates that the expected number of stops is expected to increase by `r (tidy(mods_nb[[2]])  %>% filter(str_detect(term,"gini")) %>% .$estimate %>% exp %>% round(digits=2) - 1) * 100`% for a one standard deviation increase in inequality, controlling for all other variables in the model. This is a large figure. To put it into perspective, the IRR for the rate of drug offences in 2017 is `r tidy(mods_nb[[2]])  %>% filter(str_detect(term,"drug")) %>% .$estimate %>% exp %>% round(digits=2)` and the crime deprivation score `r tidy(mods_nb[[2]])  %>% filter(str_detect(term,"crime_score")) %>% .$estimate %>% exp %>% round(digits=2)`, so the expected percent increase in S&S stemming from inequality is over half of the effect of temporally lagged drug offences and `r (tidy(mods_nb[[2]])  %>% filter(str_detect(term,"gini")) %>% .$estimate %>% exp %>% round(digits=2) - tidy(mods_nb[[2]])  %>% filter(str_detect(term,"crime_score")) %>% .$estimate %>% exp %>% round(digits=2))*100` percentage points larger than the effect of the crime score.
+  
+```{r marginal effects prep}
+# discussion and calculation here: https://cran.r-project.org/web/packages/mfx/vignettes/mfxarticle.pdf
+
+# marginal effects with each covariate at their mean value
+me1 <- mfx::negbinmfx(
+  data = df, 
+  stops ~ .,
+  robust = T,
+  atmean = T
+  ) %>%
+  .$mfxest %>%
+  as.tibble %>%
+  slice(1:length(covs) - 1) %>% 
+  mutate(
+    Var = factor(covs[-length(covs)])
+  ) %>%
+  arrange(Var)
+# average of partial marginal effects
+me2 <- mfx::negbinmfx(
+  data = df,
+  stops ~ .,
+  robust = T,
+  atmean = F) %>%
+  .$mfxest %>% 
+  as.tibble %>%
+  slice(1:length(covs) - 1) %>% 
+  mutate(
+    Var = factor(covs[-length(covs)])
+    ) %>%
+  arrange(Var)
+
+multi_coefplot <- function(mod1,mod2=NULL,
+                           name1,name2=NULL) {
+  
+  # Put model estimates into temporary data.frames:
+  model1Frame <- data.frame(Variable = mod1$Var,
+                            Coefficient = mod1$`dF/dx`, # without intercept
+                            SE = mod1$`Std. Err.`,
+                            ME = name1)
+  model2Frame <- data.frame(Variable = mod2$Var,
+                            Coefficient = mod2$`dF/dx`, # without intercept
+                            SE = mod2$`Std. Err.`,
+                            ME = name2)
+  # Combine these data.frames
+  allModelFrame <- data.frame(rbind(model1Frame, model2Frame))  # etc.
+  
+  # Specify the width of your confidence intervals
+  #interval1 <- -qnorm((1-0.9)/2)  # 90% multiplier
+  interval2 <- -qnorm((1 - 0.95)/2)  # 95% multiplier
+  
+  # Plot
+  zp1 <- ggplot(allModelFrame, aes(shape = ME)) 
+  zp1 <- zp1 + geom_hline(yintercept = 0, colour = gray(1/2), lty = 4,lwd = 1.18)
+  # zp1 <- zp1 + geom_linerange(aes(x = Variable, ymin = Coefficient - SE*interval1,
+  #                                 ymax = Coefficient + SE*interval1),
+  #                             lwd = 1.18, position = position_dodge(width = 1/2))
+  zp1 <- zp1 + geom_pointrange(aes(x = Variable, y = Coefficient, ymin = Coefficient - SE*interval2,
+                                   ymax = Coefficient + SE*interval2),
+                               lwd = 1, position = position_dodge(width = 1/2),
+                               fill = "WHITE")
+  zp1 <- zp1 + coord_flip() 
+  zp1  # The trick to these is position_dodge().
+}
+
+me_central <- me1 %>% filter(Var == "Gini") %>% select(`dF/dx`) %>% as.numeric()
+me_sderr <- me1 %>% filter(Var == "Gini") %>% select(`Std. Err.`) %>% as.numeric() 
+
+pe_central <- me2 %>% filter(Var == "Gini") %>% select(`dF/dx`) %>% as.numeric()
+pe_sderr <- me2 %>% filter(Var == "Gini") %>% select(`Std. Err.`) %>% as.numeric() 
+
+```
+  
+For a more complete picture of the substantiveness of the results, we calculate the marginal effects for Model 2 in `r fig_nums("marginal",display="c")`. We do so in two ways: first, the marginal effect when each covariate is at its average value, and second the average partial effect over every observation. From the first approach, we find that a one standard deviation increase in the level of inequality is expected to increase the number of stops by between (roughly) `r round(me_central - 1.96*me_sderr)` and `r round(me_central + 1.96*me_sderr)`. The equivalent range for the average partial effect is approximately `r round(pe_central - 1.96*pe_sderr)` and `r round(pe_central + 1.96*pe_sderr)`.    
+    
+__`r tbl_nums("regs nb","Negative binomial regression results")`__
+```{r nb models}
+stargazer(
+  mods_nb,
+  type = "text",
+  no.space = T,
+  dep.var.labels = "Stop and searches, London (2019)",
+  covariate.labels = covs,
+  omit = c("Constant","^lad"),
+  out = "police_london_regs_2019.htm",
+  notes.align = "l",
+  add.lines = list(
+    c("Borough fixed effects",rep("Y", length(mods_nb)))
+    ),
+  notes = c(
+    "All independent variables are standardised (mean equal to zero, standard deviation equal to one)."
+  )
+)
+```
+  
+__`r fig_nums("marginal","Marginal and average partial effect of inequality and other covariates on S&S")`__
+```{r marginal effects}
+multi_coefplot(
+  me1, me2, 
+  "Average ME", "Average PE"
+  ) +
+  labs(x = "", y = "Marginal Effect", shape = "")
+```
+*Note: The figure shows the marginal effect and average partial effect for each covariate for Model 2 of `r tbl_nums("regs nb",display="c")` with 95% confidence intervals.*
+
+Model 3 in `r tbl_nums("regs nb",display="cite")` introduces an interaction term between inequality and the income deprivation score, which we find is negative and significant. This indicates that the effect of inequality on S&S depends on the local level of affluence, with the magnitude of the effect larger as affluence increases. This is a striking finding. It means that while there appears to be an effect of economic inequality on the number of police stops and searches, this effect is not homogeneous across LSOAs. When a given location is characterised by high levels of income deprivation (i.e. is relatively poorer), the relationship between economic inequality and police behaviour is weaker; when a location is relatively affluent, the expected effect of economic inequality on the number of S&S is much higher. `r fig_nums("interaction",display="c")` plots the predicted number of stops for Model 2 as compared to Model 3 with the interaction term included and helps visualise the interaction effect. The figure demonstrates that relatively affluent areas (defined as being two standard deviations below the mean income deprivation score), are expected to see approximately 5 times fewer police stops when inequality is low versus high (defined as two standard deviations below versus above the mean Gini value).
+
+__`r fig_nums("interaction","Effect of interaction term on predicted S&S")`__  
+```{r interation plot}
+Linear <- mods_nb[[2]]
+Interaction <- mods_nb[[3]]
+
+grid <- df %>%
+  data_grid(
+    gini = c(-2,-1, 0, 1, 2),
+    inc_score = c(-2, 0, 2),
+    density = mean(density),
+    avg = mean(avg),
+    crime_score = mean(crime_score),
+    crime_drugs_rate = mean(crime_drugs_rate, na.rm = T),
+    non_white = mean(non_white, na.rm = T),
+    tube_distance = mean(tube_distance, na.rm = T),
+    lad_nm19 = "Greenwich"
+  ) %>%
+  gather_predictions(Linear, Interaction, type = "response") 
+                
+# gather standard errors for uncertainty
+se_linear <- predict.glm(Linear,grid[1:(nrow(grid) / 2),],type = "response", se.fit = T)$se.fit
+se_interaction <- predict.glm(Interaction,grid[((nrow(grid) / 2)+1):nrow(grid),],type = "response", se.fit = T)$se.fit
+grid$se <- c(se_linear,se_interaction)
+
+grid$model <- factor(grid$model, levels = c("Linear", "Interaction"))
+
+ggplot(grid, aes(gini, pred, colour = inc_score, group = inc_score)) +
+  geom_ribbon(aes(ymin = pred - (1.96*se), ymax = pred + (1.96*se), fill = inc_score), alpha = 0.2) +
+  geom_line(size = 1.5) +
+  facet_wrap( ~ model) +
+  labs(y = "Predicted S&S", x = "Gini coefficient (SD)", colour = "Income deprivation (SD)", fill ="Income deprivation (SD)") +
+  scale_color_viridis_c() + 
+  scale_fill_viridis_c()
+
+```
+*Note: The figure shows the how the predicted stops is affected by introducing a interaction term between inequality and income deprivation (Model 3 of `r tbl_nums("regs nb",display="c")`). We fix all other covariates at their mean values. Shaded areas are 95% confidence intervals.*
+
+## Robustness checks
+
+We perform a number of robustness checks. First, We check whether our results are London-specific or whether the relationship between economic inequality and S&S generalises to other urban contexts. To evaluate this, we re-run the negative binomial specifications for other major cities in England: Birmingham, Liverpool and Manchester. Results can be found in `r tbla_nums("cits",display="c")` of the Annex, but it suffices to say that they remain virtually unaltered -- local economic inequality is associated with a higher number of police stops and searches in these cities as well.
+
+Second, we examine whether our results are sensitive to how we model the outcome measure. Rather than raw counts of stops per LSOA, we take the rate of stops in each LSOA (per 1000 residents). `r tbla_nums("stop_rate",display="c")` presents the results when we use this outcome measure (log scale) for the OLS and SDM regression. Again, we find consistent results, with both the main effect of inequality on the stops rate, as well as the interaction between inequality and income deprivation, statistically significant.
+
+Finally, we also check whether the results hold when removing Westminster Borough, given that the area has neighbourhoods with extremely high levels of inequality as well as stops. The results are qualitatively the same for this sub-sample analysis -- see `r tbla_nums("westminster",display="c")` in the Annex.   
+  
+# Discussion and conclusion
+
+Criminologists have long studied the purpose and potential effects of police powers to stop and search members of the public. Either based on reasonable suspicion or completely "suspicion-less" (such as those based on S60), increases in the use of S&S powers in the UK are often followed by intense public discussions about the effectiveness of such policies. Policymakers usually defend S&S practices praising its effective deterrent effects, especially on drug offences and knife crimes. However, previous work both in the UK and elsewhere has demonstrated that stopping and searching citizens has at best a marginal effect on preventing future offending behaviour [@mccandless2016initiatives; @macdonald2016effects]. In London specifically, only drug offences appear to be affected by an increase in S&S practices, and only to a small extent [@tiratelli2018does]. What is behind the persistence of this policing strategy?
+
+Previous research over decades has suggested that S&S is not solely about crime-fighting, rather it is also about social order maintenance -- i.e., it is a tool used by officers to assert power and control in a situation or locale [@tiratelli2018does; @choongh1998policing]. This argument finds empirical evidence in studies about *who* tends to be stopped and searched by police officers: in England and Wales, ethnic disparities in S&S suggest that police officers tend to discriminate BAME groups in comparison with White citizens [@shiner2018colour; @vomfell2021officer]. 
+
+In this we paper we focus on *where* S&S practices tend to concentrate in the city of London in 2019. We hypothesise that, if S&S is used by police officers as a tool to assert power over members of the public and emphasise a social order in which the police serve to protect citizens from potential criminals, highly unequal locations occupied by several economic groups of people could draw the attention of officers conducting police searches. 
+
+The empirical analysis in this paper finds that economic inequality predicts the S&S incidence at a small spatial scale. We used a novel measure of salient, spatially-granular economic inequality developed by @suss_local. This data provides estimated housing values for around 23 million addresses in the UK in 2019, allowing us to investigate the effects of local inequality at a level not before possible. Furthermore, using housing values rather than income figures is theoretically sound as it has been shown to substantively affect people's perceptions of economic discrepancies [@suss_local]. Drawing upon publicly available S&S data from London in 2019 at the LSOA level and keeping previous crime rates, drug offences, and ethnic composition constant, among other demographic variables, we demonstrate that police officers tend to engage in more searches in more economically unequal locations. 
+
+Furthermore, we found a significant and negative interaction between economic inequality and income deprivation. This means that, whilst there is an association between inequality and the number of searches, the effect depends on the level of affluence. The more affluent an LSOA is -- i.e. low levels of income deprivation -- the stronger the effect of inequality on S&S. This is a striking result. The fact that income deprivation alone does not influence the spatial concentration of searches but economic inequality does suggests that affluence alone is not a factor taken into account when officers decide to employ their S&S powers. Instead, the factor is the distribution of wealth. Whilst a homogeneously wealthy or poor neighbourhood will have relatively few searches, a neighbourhood where the gap between wealthy and poor residents is large will have plenty. Among those heterogeneous locations, the more affluent the neighbourhood is, the more searches will occur.
+
+These results suggest that S&S powers are indeed employed as a tool of social control, protecting and asserting power over some segments of society. The police contribute to maintain social order by symbolically reproducing two groups of people: law-abiding citizens, the ones police officers protect; and potential criminals, the ones police officers police [@bradford2016police; @choongh1998policing]. Highly unequal neighbourhoods where the rich and the poor co-exist are areas in which the two groups collide, with citizens to protect and individuals to police both occupying the streets, thus attracting a heavier police presence. By disproportionately stopping and searching members of the public in economically unequal locations, police officers contribute to ascribe identity and maintain social order.
+
+Limitations should, of course, be acknowledged. First, we do not claim causality. There could be omitted variable bias confounding the relationship between economic inequality and the number of searches by LSOA, given that we -- obviously -- did not randomly assign levels of inequality, nor did we engage in any particular identification strategy. Future research should employ quasi-experimental designs to potentially assess the causal effect of the association we found. Second, we only analysed data from London and other English cities. Other contexts, such as the Stop, Question, and Frisk policies in the US could have different spatial properties relative to those in the UK. Third, we did not distinguish between searches based on reasonable suspicion and 'suspicion-less' searches based on S60 -- it is possible that they have different spatial distributions. We would welcome studies focusing on more nuanced analysis of S&S in the UK and elsewhere. Finally, we only analysed data from 2019 -- future research could model time series assessing the extent to which structural neighbourhood conditions continuously influence the use of S&S powers.
+
+Despite these limitations, the results presented in this paper provide new and valuable evidence on the relationship between economic inequality and policing behaviour, and on S&S policies as a form of social control.  
+  
+# Annex
+
+__`r tbla_nums("cits","Stop and searches: Birmingham, Liverpool, and Manchester (2019)")`__
+```{r robust_police_cities}
+cits <- list(
+  birm = birm,
+  liv = liv,
+  manch = manch
+  )
+
+cits <- cits %>% 
+  map( 
+  select,
+  stops,
+  gini, 
+  avg, 
+  density = density_work, 
+  inc_score, 
+  crime_score, 
+  crime_drugs_rate,
+  non_white
+  ,rail_distance
+  ,lad_nm19 
+  ) %>%
+  map(
+  mutate_at,
+  vars(density, avg),
+  ~ log(.)
+  ) %>% 
+  map(
+    mutate_at,
+    vars(
+      density,
+      gini,
+      avg,
+      crime_drugs_rate,
+      crime_score,
+      inc_score, 
+      non_white 
+      ,rail_distance
+    ),
+    ~ scale(.) %>% as.numeric
+  ) %>% 
+  map(na.omit) %>%
+  map(
+    st_drop_geometry
+    ) 
+
+mods_cits <- list(
+  mod_birm1 = glm.nb(data = cits[["birm"]], stops ~ .),
+  mod_birm2 = glm.nb(data = cits[["birm"]], stops ~ gini * inc_score + .),
+  mod_liv1 = glm.nb(data = cits[["liv"]], stops ~ .),
+  mod_liv2 = glm.nb(data = cits[["liv"]], stops ~ gini * inc_score + .),
+  mod_manch1 = glm.nb(data = cits[["manch"]], stops ~ .),
+  mod_manch2 = glm.nb(data = cits[["manch"]], stops ~ gini * inc_score + .)
+)
+
+stargazer(mods_cits
+          ,type = "text",no.space = T
+          ,out = "police_cities_regs.htm"
+          ,dep.var.labels.include = F
+          ,dep.var.caption = ""
+          ,column.labels = c("Birmingham","Liverpool","Manchester")
+          ,column.separate = c(2,2,2)
+          ,omit = c("Constant|lad_nm19")
+          ,covariate.labels = covs %>% str_replace_all("TfL","Rail")
+          ,notes.align = "l"
+          ,add.lines = list(
+            c("LAD fixed effects", rep("Y", length(mods_cits)))
+          )
+          ,notes = c(
+            "All independent variables are standardised (mean equal to zero, standard deviation equal to one)."
+          )
+)
+
+```
+
+__`r tbla_nums("stop_rate", "Stop and search rate per 1000 residents")`__
+```{r}
+# Y = stops / 1000 residents
+set.seed(18*1740)
+tmp <- lond %>% 
+  mutate(stops = stops / (workday_pop / 1000)) %>% 
+  select(
+    stops,
+    gini, 
+    avg, 
+    density = density_work, 
+    inc_score, 
+    crime_score, 
+    crime_drugs_rate,
+    non_white,
+    tube_distance,
+    lad_nm19 
+    ) %>%
+  mutate_at(
+    vars(avg,density),
+    ~ log(.)
+  ) %>% 
+  mutate(
+    stops = log(stops + 1)
+  ) %>%
+  mutate_at(
+    vars(
+      density,
+      gini,
+      avg,
+      crime_drugs_rate,
+      crime_score,
+      inc_score, 
+      non_white, 
+      tube_distance
+      ),
+    ~ scale(.) %>% as.numeric
+  ) %>% 
+  na.omit 
+
+list.queen <- poly2nb(tmp, queen = T)
+W <- nb2listw(list.queen
+              , style = "W" # equal weight to neighbours
+              , zero.policy = T)
+
+tmp <- tmp %>% st_drop_geometry()
+
+mod_lm_robust <- list(
+  lm(stops ~ ., data = tmp),
+  lm(stops ~ gini * inc_score + ., data = tmp)
+)
+
+# fit durbin model
+mod_durb_robust <- list(
+  lagsarlm(
+    stops ~ .,
+    data = tmp,
+    type = "mixed",
+    method = "MC",
+    W
+  ),
+  lagsarlm(
+    stops ~ gini * inc_score + .,
+    data = tmp,
+    type = "mixed",
+    method = "MC",
+    W
+  )
+)
+
+stargazer(
+  mod_lm_robust,
+  mod_durb_robust,
+  type = "text",
+  no.space = T,
+  dep.var.labels = "Ln(Stops / 1000 residents)",
+  covariate.labels = covs,
+  omit = c("Constant","^(lag|lad)"),
+  add.lines = list(
+    c("Borough fixed effects", rep("Y", length(mod_lm_robust)*2)),
+    c("Rho","","",
+      summary(mod_durb_robust[[1]])$rho %>% round(digits = 2),
+      summary(mod_durb_robust[[2]])$rho %>% round(digits = 2)
+      )
+  ),
+  out = "police_london_spatial_regs_robust.htm",
+  notes.align = "l",
+  notes = c(
+    "All independent variables are standardised (mean equal to zero, standard deviation equal to one)."
+  ),
+  model.names = F,
+  column.labels = c("OLS","SDM"),
+  column.separate = c(2,2)
+)
+```
+
+__`r tbla_nums("westminster", "Regression results without Westminster Borough")`__
+```{r}
+# without Westminster
+tmp <- df %>% 
+  filter(
+    lad_nm19 != "Westminster"
+  )
+
+mods_west <- list(
+  mod1 = glm.nb(data = tmp, stops ~ gini, maxit = 1000),
+  mod2 = glm.nb(data = tmp, stops ~ ., maxit = 1000),
+  mod3 = glm.nb(data = tmp, stops ~ gini * inc_score + ., maxit = 1000)
+)
+
+stargazer(
+  mods_west,
+  type = "text",
+  no.space = T,
+  dep.var.labels = "Stop and searches, London (2019)",
+  covariate.labels = covs,
+  omit = c("Constant","^lad"),
+  out = "police_london_regs_robust_westminster.htm",
+  notes.align = "l",
+  add.lines = list(
+    c("Borough fixed effects", rep("Y", length(mods_west)))
+  ),
+  notes = c(
+    "All independent variables are standardised (mean equal to zero, standard deviation equal to one).",
+    "All models exclude Westminster Borough"
+  )
+)
+```
+
+```{r, eval = F}
+#__`r tbla_nums("serious_crime", "Additional control variables for serious crime rates")`__
+
+# crime score replace with crime serious (i.e. c("Violence and sexual offences", "Possession of weapons", "Robbery"))
+tmp <- lond %>% 
+  select(
+    stops,
+    gini, 
+    avg, 
+    density = density_work, 
+    inc_score, 
+    crime_score,
+    crime_serious_rate, 
+    crime_drugs_rate,
+    non_white,
+    tube_distance,
+    lad_nm19 
+    ) %>%
+  mutate_at(
+    vars(avg, density),
+    ~ log(.)
+  ) %>% 
+  mutate_at(
+    vars(
+      density,
+      gini,
+      avg,
+      crime_drugs_rate,
+      crime_score,
+      crime_serious_rate,
+      inc_score, 
+      non_white, 
+      tube_distance
+      ),
+    ~ scale(.) %>% as.numeric
+  ) %>% 
+  na.omit %>% 
+  st_drop_geometry()
+
+
+mods_crime_serious <- list(
+  #mod1 = glm.nb(data = tmp, stops ~ gini, maxit = 1000),
+  mod2 = glm.nb(data = tmp, stops ~ ., maxit = 1000),
+  mod3 = glm.nb(data = tmp, stops ~ gini * inc_score + ., maxit = 1000)
+)
+
+stargazer(
+  mods_crime_serious,
+  type = "text",
+  no.space = T,
+  dep.var.labels = "Stop and searches, London (2019)",
+  covariate.labels = c(covs[1:5], "Serious crime rate", covs[6:length(covs)]),
+  omit = c("Constant","^lad"),
+  out = "police_london_regs_robust_crime_serious.htm",
+  notes.align = "l",
+  add.lines = list(
+    c("Borough fixed effects", rep("Y", length(mods_crime_serious)))
+  ),
+  notes = c(
+    "All independent variables are standardised (mean equal to zero, standard deviation equal to one).")
+)
+```
+
+```{r, eval = F}
+# alternative conceptualisations of ethnicity
+tmp <- lond %>% 
+  select(
+    stops,
+    gini, 
+    avg, 
+    density = density_work, 
+    inc_score, 
+    crime_score,
+    crime_drugs_rate,
+    black,
+    ethnic_hhi,
+    tube_distance,
+    lad_nm19 
+    ) %>%
+  mutate_at(
+    vars(avg, density),
+    ~ log(.)
+  ) %>% 
+  mutate_at(
+    vars(
+      density,
+      gini,
+      avg,
+      crime_drugs_rate,
+      crime_score,
+      inc_score, 
+      black,
+      ethnic_hhi, 
+      tube_distance
+      ),
+    ~ scale(.) %>% as.numeric
+  ) %>% 
+  na.omit %>% 
+  st_drop_geometry()
+
+
+mods_ethnic <- list(
+  glm.nb(data = tmp %>% select(-ethnic_hhi), stops ~ ., maxit = 1000),
+  glm.nb(data = tmp %>% select(-ethnic_hhi), stops ~ gini * inc_score + ., maxit = 1000),
+  glm.nb(data = tmp %>% select(-black), stops ~ ., maxit = 1000),
+  glm.nb(data = tmp %>% select(-black), stops ~ gini * inc_score + ., maxit = 1000)
+)
+
+stargazer(
+  mods_ethnic,
+  type = "text",
+  no.space = T,
+  dep.var.labels = "Stop and searches, London (2019)",
+  covariate.labels = c(covs[1:6],"Black (%)","Ethnic HHI",covs[8:9]),
+  omit = c("Constant","^lad"),
+  out = "police_london_regs_ethnic.htm",
+  notes.align = "l",
+  add.lines = list(
+    c("Borough fixed effects", rep("Y", length(mods_ethnic)))
+  ),
+  notes = c(
+    "All independent variables are standardised (mean equal to zero, standard deviation equal to one).")
+)
+```
+
+# References
+
+
